@@ -41,6 +41,10 @@ class TwitterError(Exception):
 class ConnectionError(TwitterError):
     """Network related errors"""
 
+    def __init__(self, message, code=None):
+        self.code =code
+        super(ConnectionError, self).__init__(message)
+
 
 class Twitter(object):
     """
@@ -50,8 +54,8 @@ class Twitter(object):
 
     To create an instance of the twitter.Api class, with no authentication:
 
-      >>> import tweet
-      >>> api = tweet.Twitter()
+      >>> import pytweet
+      >>> api = pytweet.Twitter()
 
     See each method for more information.
     """
@@ -109,8 +113,10 @@ class Twitter(object):
         try:
             handle = urllib2.urlopen(req, post_data)
         except urllib2.URLError, e:
-            raise ConnectionError("Network error. Is limit reached? "\
-                                  "(HTTP code: %d)" % e.code)
+            ce = ConnectionError("Network error. Is limit reached? "\
+                                 "(HTTP code: %d)" % e.code)
+            ce.code = e.code
+            raise ce
 
         return self._parse_response(handle.read())
 
@@ -118,9 +124,6 @@ class Twitter(object):
         """
         Returns extended information of a given user, specified by ID or
         screen name. The author's most recent status will be included.
-
-        >>> api.get_user('Reflejo')
-        >>> 
         """
         uri = '/users/show/%s.json' % user
         return TwitterUser(**self._fetchurl(uri))

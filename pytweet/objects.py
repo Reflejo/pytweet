@@ -1,3 +1,7 @@
+"""
+Twitter Objects representation. Data is normalized to python types.
+"""
+
 import math
 from parsers import parsedate, unescape
 
@@ -45,7 +49,7 @@ class TwitterUser(TwitterObject):
     
     _transformation = {
         'created_at': parsedate,
-        'description': unicode,
+        'description': unescape,
         'favourites_count': int,
         'followers_count': int,
         'following': bool,
@@ -77,7 +81,7 @@ class TwitterUser(TwitterObject):
 #########################################################
 class TwitterStatusSet(object):
     """
-    Search result set. It's a lazy banch of results. url is retrived only 
+    Status result set. It's a lazy banch of statuses. url is retrived only 
     when resultset is sliced.
     """
 
