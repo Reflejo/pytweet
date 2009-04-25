@@ -23,7 +23,7 @@ import urllib, urllib2
 import urlparse
 from objects import TwitterStatusSet, TwitterUser
 
-__author__ = 'Reflejo@gmail.com'
+__author__ = 'Martín Conte Mac Donell <Reflejo@gmail.com>'
 __version__ = '0.1-beta'
 
 API_DOMAIN = 'twitter.com'
@@ -50,7 +50,7 @@ class Twitter(object):
     """
     Main Twitter API. 
 
-    Example usage:
+    Usage:
 
     To create an instance of the twitter.Api class, with no authentication:
 
@@ -128,15 +128,12 @@ class Twitter(object):
         uri = '/users/show/%s.json' % user
         return TwitterUser(**self._fetchurl(uri))
 
-    def search(self, query, per_page=100, since_id=None, lang=None, 
-               geocode=None):
+    def search(self, query, since_id=None, lang=None, geocode=None):
         """
         Returns tweets that match a specified query.
 
         @lang: Restricts tweets to the given language, given by an 
                ISO 639-1 code. [optional]
-        @per_page: The number of tweets to return per page, up to a max 
-                   of 100. [optional]
         @since_id: Returns tweets with status ids greater than the given 
                    id. [optional]
         @geocode: Returns tweets by users located within a given radius 
@@ -146,5 +143,5 @@ class Twitter(object):
                   units must be specified as either "mi" (miles) or 
                   "km" (kilometers). [optional]
         """
-        return TwitterStatusSet(self, query, per_page, since_id, lang, 
-                                geocode)
+        return TwitterStatusSet(self, query, since_id=since_id, 
+                                lang=lang, geocode=geocode)

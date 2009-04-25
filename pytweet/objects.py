@@ -97,8 +97,8 @@ class TwitterStatusSet(object):
         self._results = []
 
     def _fill_metadata(self, metadata):
-        for k in ('completed_in', 'max_id'):
-            setattr(self, k, metadata[k])
+        self.completed_in = metadata['completed_in']
+        self.max_id = max(self.max_id, metadata['max_id'])
 
     def _fetch_results(self, offset):
         page = int(math.ceil(offset / self.per_page)) + 1
@@ -106,7 +106,7 @@ class TwitterStatusSet(object):
             'q': self.query,
             'page': page,
             'rpp': self.per_page,
-            'since_id': self.since_id,
+            'since_id': self.since_id if not self.max_id else None,
             'lang': self.lang,
             'max_id': self.max_id,
             'geocode': self.geocode,
@@ -115,9 +115,8 @@ class TwitterStatusSet(object):
         # Fill results with empty values. This is done because user can slice
         # a distance of more than one page for example results[10000:10010]
         fill_amount = (page - 1) * self.per_page
-        if fill_amount > len(self._results):
-            for i in xrange(len(self._results), fill_amount):
-                self._results.append(None)
+        for i in xrange(len(self._results), fill_amount):
+            self._results.append(None)
 
         result = self._api._fetchurl('/search.json', get_data=data,
                                      domain=SEARCH_API_DOMAIN)
@@ -125,6 +124,13 @@ class TwitterStatusSet(object):
         results_count = len(results)
         for i in xrange(self.per_page):
             add = '' if i >= results_count else TwitterStatus(**results[i])
+
+            # There is a bug in twitter API. You cannot use max_id 
+            # and since_id together. See:
+            # http://code.google.com/p/twitter-api/issues/detail?id=486
+            if add and add.id <= self.since_id:
+                results_count = i
+                add = ''
 
             if len(self._results) > offset:
                 self._results[offset] = add
@@ -134,6 +140,7 @@ class TwitterStatusSet(object):
             offset += 1
 
         self._fill_metadata(result)
+        return results_count
 
     def __len__(self):
         raise Exception("I can't tell you D:")
@@ -173,17 +180,23 @@ class TwitterStatusSet(object):
             offset = k
             limit = 1
 
-        # Check if some result is None or if result is smaller than 
-        # requested index.
-        is_smaller = (len(self._results) < offset + limit) and limit > 0
-        is_empty = False
+        actual = len(self._results)
+        while True:
+            # Check if some result is None or if result is smaller than 
+            # requested index.
+            end = offset + limit
+            is_smaller = limit > 0 and (len(self._results) < end)
+            has_empty = not is_smaller and None in self._results[offset:end]
 
-        if not is_smaller:
-            is_empty = bool([res for res in self._results[offset:offset+limit]\
-                                if res is None])
+            if not is_smaller and not has_empty:
+                break
 
-        if is_smaller or is_empty:
-            self._fetch_results(offset)
+            # if we got less results that per_page we are done.
+            if self._fetch_results(offset) < self.per_page:
+                break
+
+            offset = len(self._results)
+            limit -= (offset - actual)
 
         if isinstance(k, slice):
             return [res for res in self._results[k] if res != '']
