@@ -113,9 +113,8 @@ class Twitter(object):
         try:
             handle = urllib2.urlopen(req, post_data)
         except urllib2.URLError, e:
-            ce = ConnectionError("Network error. Is limit reached? "\
-                                 "(HTTP code: %d)" % e.code)
-            ce.code = e.code
+            ce = ConnectionError("Network error (%s)" % str(e))
+            ce.code = getattr(e, 'code')
             raise ce
 
         return self._parse_response(handle.read())
