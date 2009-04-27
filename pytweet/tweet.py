@@ -114,7 +114,7 @@ class Twitter(object):
             handle = urllib2.urlopen(req, post_data)
         except urllib2.URLError, e:
             ce = ConnectionError("Network error (%s)" % str(e))
-            ce.code = getattr(e, 'code')
+            ce.code = getattr(e, 'code', None)
             raise ce
 
         return self._parse_response(handle.read())
