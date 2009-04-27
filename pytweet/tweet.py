@@ -27,7 +27,7 @@ __author__ = 'Martín Conte Mac Donell <Reflejo@gmail.com>'
 __version__ = '0.1-beta'
 
 API_DOMAIN = 'twitter.com'
-
+SOCKET_TIMEOUT = 5
 
 class TwitterError(Exception):
   """Base class for Twitter errors"""
@@ -62,6 +62,9 @@ class Twitter(object):
 
     def __init__(self, username=None, password=None):
         self.authenticate(username, password)
+
+        # This is the only way we can prevent socket hangs.
+        urllib2.socket.getdefaulttimeout(SOCKET_TIMEOUT)
 
     def authenticate(self, username, password):
         # Just keep authenticate information. We will use it in next posts.
