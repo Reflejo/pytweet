@@ -5,7 +5,7 @@ Twitter Objects representation. Data is normalized to python types.
 import math
 from parsers import parsedate, unescape
 
-SEARCH_API_DOMAIN = 'search.twitter.com'
+ITEMS_PER_PAGE = 100
 
 #########################################################
 # Basic Objects
@@ -79,51 +79,53 @@ class TwitterUser(TwitterObject):
 #########################################################
 # Status Set
 #########################################################
-class TwitterStatusSet(object):
+class TwitterResultSet(object):
     """
-    Status result set. It's a lazy banch of statuses. url is retrived only 
+    Result set. It's a lazy banch of data. url is retrived only 
     when resultset is sliced.
     """
 
-    def __init__(self, api, query, per_page=100, since_id=None, lang=None, 
-                 geocode=None):
+    resultclass = None
+
+    def __init__(self, api, uri, **kwargs):
         self._api = api
-        self.query = query
-        self.per_page = per_page
-        self.since_id = since_id
-        self.lang = lang
-        self.geocode = geocode
-        self.max_id = None
         self._results = []
+        self.uri = uri
+        self.domain = kwargs.pop('domain', None)
+        self.since_id = kwargs.pop('since_id', 0)
+
+        for k, v in kwargs.iteritems():
+            setattr(self, k, v)
 
     def _fill_metadata(self, metadata):
-        self.completed_in = metadata['completed_in']
-        self.max_id = max(self.max_id, metadata['max_id'])
+        # Fill some results metadata as needed
+        pass
+
+    def _get_data(self, page):
+        # Make the dict for HTTP GET request
+        pass
+
+    def _get_results(self, result):
+        # Get result with some criteria like a dict key or something.
+        # By default we just return given list.
+        return result
 
     def _fetch_results(self, offset):
-        page = int(math.ceil(offset / self.per_page)) + 1
-        data = {
-            'q': self.query,
-            'page': page,
-            'rpp': self.per_page,
-            'since_id': self.since_id if not self.max_id else None,
-            'lang': self.lang,
-            'max_id': self.max_id,
-            'geocode': self.geocode,
-        }
+        page = int(math.ceil(offset / ITEMS_PER_PAGE)) + 1
+        data = self._get_data(page)
 
         # Fill results with empty values. This is done because user can slice
         # a distance of more than one page for example results[10000:10010]
-        fill_amount = (page - 1) * self.per_page
+        fill_amount = (page - 1) * ITEMS_PER_PAGE
         for i in xrange(len(self._results), fill_amount):
             self._results.append(None)
 
-        result = self._api._fetchurl('/search.json', get_data=data,
-                                     domain=SEARCH_API_DOMAIN)
-        results = result.pop('results')
+        result = self._api._fetchurl(self.uri, get_data=data,
+                                     domain=self.domain)
+        results = self._get_results(result)
         results_count = len(results)
-        for i in xrange(self.per_page):
-            add = '' if i >= results_count else TwitterStatus(**results[i])
+        for i in xrange(ITEMS_PER_PAGE):
+            add = '' if i >= results_count else self.resultclass(**results[i])
 
             # There is a bug in twitter API. You cannot use max_id 
             # and since_id together. See:
@@ -175,16 +177,16 @@ class TwitterStatusSet(object):
 
         if isinstance(k, slice):
             offset = k.start or 0
-            limit = (k.stop - offset) if k.stop is not None else self.per_page
+            limit = (k.stop - offset) if k.stop is not None else ITEMS_PER_PAGE
         else:
             offset = k
             limit = 1
 
-        actual = len(self._results)
         while True:
             # Check if some result is None or if result is smaller than 
             # requested index.
             end = offset + limit
+
             is_smaller = limit > 0 and (len(self._results) < end)
             has_empty = not is_smaller and None in self._results[offset:end]
 
@@ -192,13 +194,55 @@ class TwitterStatusSet(object):
                 break
 
             # if we got less results that per_page we are done.
-            if self._fetch_results(offset) < self.per_page:
+            fetch_total = self._fetch_results(offset)
+            if fetch_total < ITEMS_PER_PAGE:
                 break
 
             offset = len(self._results)
-            limit -= (offset - actual)
+            limit -= fetch_total
 
         if isinstance(k, slice):
             return [res for res in self._results[k] if res != '']
         else:
             return self._results[k] or None
+
+
+class TwitterUserSet(TwitterResultSet):
+
+    resultclass = TwitterUser
+
+    def _get_data(self, page):
+        return {
+            'page': page,
+            'user': self.user
+        }
+
+
+class TwitterStatusSet(TwitterResultSet):
+    """
+    Status result set. It's a lazy banch of statuses. 
+    """
+
+    resultclass = TwitterStatus
+
+    def __init__(self, *args, **kwargs):
+        self.max_id = 0
+        super(TwitterStatusSet, self).__init__(*args, **kwargs)
+
+    def _fill_metadata(self, metadata):
+        self.completed_in = metadata['completed_in']
+        self.max_id = max(self.max_id, metadata['max_id'])
+
+    def _get_results(self, result):
+        return result['results']
+
+    def _get_data(self, page):
+        return {
+            'q': self.query,
+            'page': page,
+            'rpp': ITEMS_PER_PAGE,
+            'since_id': self.since_id if not self.max_id else None,
+            'lang': self.lang,
+            'max_id': self.max_id,
+            'geocode': self.geocode,
+        }

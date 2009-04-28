@@ -21,12 +21,14 @@ Oh, and values are normalized to python types.
 import simplejson
 import urllib, urllib2
 import urlparse
-from objects import TwitterStatusSet, TwitterUser
+from objects import TwitterStatusSet, TwitterUser, TwitterUserSet
 
-__author__ = 'Martín Conte Mac Donell <Reflejo@gmail.com>'
+__author__ = 'Martin Conte Mac Donell <Reflejo@gmail.com>'
 __version__ = '0.1-beta'
 
 API_DOMAIN = 'twitter.com'
+SEARCH_API_DOMAIN = 'search.twitter.com'
+
 SOCKET_TIMEOUT = 5
 
 class TwitterError(Exception):
@@ -46,6 +48,17 @@ class ConnectionError(TwitterError):
         super(ConnectionError, self).__init__(message)
 
 
+# Decorator for authenticated methods
+def authenticated(func):
+    def newf(*args, **kw):
+        instance = args[0]
+        if not instance.is_authenticated():
+            raise TwitterError('You must call authenticate first')
+
+        return func(*args, **kw)
+    return newf
+
+
 class Twitter(object):
     """
     Main Twitter API. 
@@ -61,10 +74,15 @@ class Twitter(object):
     """
 
     def __init__(self, username=None, password=None):
-        self.authenticate(username, password)
+        self._auth_header = ()
+        if username and password:
+            self.authenticate(username, password)
 
         # This is the only way we can prevent socket hangs.
         urllib2.socket.setdefaulttimeout(SOCKET_TIMEOUT)
+
+    def is_authenticated(self):
+        return bool(self._auth_header)
 
     def authenticate(self, username, password):
         # Just keep authenticate information. We will use it in next posts.
@@ -81,8 +99,7 @@ class Twitter(object):
             raise TwitterError(data['error'])
         return parsed
 
-    def _fetchurl(self, uri, domain=API_DOMAIN, post_data=None,
-                  get_data=None):
+    def _fetchurl(self, uri, domain=None, post_data=None, get_data=None):
         # Fetch a URL.
         #
         # @uri: The uri to retrive
@@ -105,7 +122,7 @@ class Twitter(object):
         
         # craft url
         uri = "%s?%s" % (uri, urllib.urlencode(get_data)) if get_data else uri
-        url = urlparse.urljoin("http://%s" % domain, uri)
+        url = urlparse.urljoin("http://%s" % (domain or API_DOMAIN), uri)
 
         req = urllib2.Request(url)
         post_data = urllib.urlencode(post_data) or None
@@ -122,7 +139,7 @@ class Twitter(object):
 
         return self._parse_response(handle.read())
 
-    def get_user(self, user):
+    def user(self, user):
         """
         Returns extended information of a given user, specified by ID or
         screen name. The author's most recent status will be included.
@@ -145,5 +162,27 @@ class Twitter(object):
                   units must be specified as either "mi" (miles) or 
                   "km" (kilometers). [optional]
         """
-        return TwitterStatusSet(self, query, since_id=since_id, 
-                                lang=lang, geocode=geocode)
+        uri = '/search.json'
+        return TwitterStatusSet(self, uri, domain=SEARCH_API_DOMAIN,
+                                query=query, lang=lang, geocode=geocode,
+                                since_id=since_id)
+
+    @authenticated
+    def followers(self, user=None):
+        """
+        Returns the authenticating user's followers, each with current 
+        status inline.  They are ordered by the order in which they 
+        joined Twitter
+        """
+        uri = '/statuses/followers.json'
+        return TwitterUserSet(self, uri, user=user)
+
+    @authenticated
+    def friends(self, user=None):
+        """
+        Returns the authenticating user's followers, each with current 
+        status inline.  They are ordered by the order in which they 
+        joined Twitter
+        """
+        uri = '/statuses/friends.json'
+        return TwitterUserSet(self, uri, user=user)
