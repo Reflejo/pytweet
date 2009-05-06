@@ -21,7 +21,8 @@ Oh, and values are normalized to python types.
 import simplejson
 import urllib, urllib2
 import urlparse
-from objects import TwitterStatusSet, TwitterUser, TwitterUserSet
+from objects import TwitterSearchResultSet, TwitterUser, TwitterUserSet, \
+                    TwitterStatus
 
 __author__ = 'Martin Conte Mac Donell <Reflejo@gmail.com>'
 __version__ = '0.1-beta'
@@ -163,9 +164,9 @@ class Twitter(object):
                   "km" (kilometers). [optional]
         """
         uri = '/search.json'
-        return TwitterStatusSet(self, uri, domain=SEARCH_API_DOMAIN,
-                                query=query, lang=lang, geocode=geocode,
-                                since_id=since_id)
+        return TwitterSearchResultSet(self, uri, domain=SEARCH_API_DOMAIN,
+                                      query=query, lang=lang, geocode=geocode,
+                                      since_id=since_id)
 
     @authenticated
     def followers(self, user=None):
@@ -186,3 +187,14 @@ class Twitter(object):
         """
         uri = '/statuses/friends.json'
         return TwitterUserSet(self, uri, user=user)
+
+    @authenticated
+    def destroy(self, id):
+        """
+        Returns the authenticating user's followers, each with current 
+        status inline.  They are ordered by the order in which they 
+        joined Twitter
+        """
+        uri = '/statuses/destroy/%d.json' % id
+        data = {'delete': '1'}
+        return TwitterStatus(**self._fetchurl(uri, post_data=data))

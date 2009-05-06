@@ -3,6 +3,7 @@ Twitter Objects representation. Data is normalized to python types.
 """
 
 import math
+import sys
 from parsers import parsedate, unescape
 
 ITEMS_PER_PAGE = 100
@@ -26,15 +27,19 @@ class TwitterObject(object):
     def __init__(self, dictargs={}, **kwargs):
         kwargs.update(dictargs)
         for key, fc in self._transformation.iteritems():
+            if isinstance(fc, str):
+                fc = getattr(sys.modules[__name__], fc)
+
             val = fc(kwargs[key]) if key in kwargs and kwargs[key] else None
             setattr(self, key, val)
 
 
-class TwitterStatus(TwitterObject):
+class TwitterSearchResult(TwitterObject):
     
     _transformation = {
         'text': unescape,
         'to_user_id': int,
+        'to_user': unicode,
         'from_user': unicode,
         'id': int,
         'from_user_id': int,
@@ -68,11 +73,27 @@ class TwitterUser(TwitterObject):
         'profile_text_color': unicode,
         'protected': bool,
         'screen_name': unicode,
-        'status': TwitterStatus,
+        'status': 'TwitterStatus',
         'statuses_count': int,
         'time_zone': unicode,
         'url': unicode,
         'utc_offset': int,
+    }
+
+
+class TwitterStatus(TwitterObject):
+    
+    _transformation = {
+        'created_at': parsedate,
+        'id': int,
+        'text': unescape,
+        'source': unicode,
+        'truncated': bool,
+        'in_reply_to_status_id': int,
+        'in_reply_to_user_id': int,
+        'favorited': bool,
+        'in_reply_to_screen_name': unicode,
+        'user': TwitterUser,
     }
 
 
@@ -218,16 +239,16 @@ class TwitterUserSet(TwitterResultSet):
         }
 
 
-class TwitterStatusSet(TwitterResultSet):
+class TwitterSearchResultSet(TwitterResultSet):
     """
     Status result set. It's a lazy banch of statuses. 
     """
 
-    resultclass = TwitterStatus
+    resultclass = TwitterSearchResult
 
     def __init__(self, *args, **kwargs):
         self.max_id = 0
-        super(TwitterStatusSet, self).__init__(*args, **kwargs)
+        super(TwitterSearchResultSet, self).__init__(*args, **kwargs)
 
     def _fill_metadata(self, metadata):
         self.completed_in = metadata['completed_in']
