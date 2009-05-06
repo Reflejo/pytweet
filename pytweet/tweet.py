@@ -22,7 +22,7 @@ import simplejson
 import urllib, urllib2
 import urlparse
 from objects import TwitterSearchResultSet, TwitterUser, TwitterUserSet, \
-                    TwitterStatus
+                    TwitterStatus, TwitterStatusSet
 
 __author__ = 'Martin Conte Mac Donell <Reflejo@gmail.com>'
 __version__ = '0.1-beta'
@@ -30,7 +30,7 @@ __version__ = '0.1-beta'
 API_DOMAIN = 'twitter.com'
 SEARCH_API_DOMAIN = 'search.twitter.com'
 
-SOCKET_TIMEOUT = 5
+SOCKET_TIMEOUT = 10
 
 class TwitterError(Exception):
   """Base class for Twitter errors"""
@@ -191,10 +191,22 @@ class Twitter(object):
     @authenticated
     def destroy(self, id):
         """
-        Returns the authenticating user's followers, each with current 
-        status inline.  They are ordered by the order in which they 
-        joined Twitter
+        Destroys the status specified by the required ID parameter.
+        The authenticating user must be the author of the specified status.
         """
         uri = '/statuses/destroy/%d.json' % id
         data = {'delete': '1'}
         return TwitterStatus(**self._fetchurl(uri, post_data=data))
+
+    def user_timeline(self, user=None, since_id=None):
+        """
+        Returns the most recent user's timeline via the id parameter. 
+        This is the equivalent of the Web /<user> page for your own user, 
+        or the profile page for a third party.
+        """
+        if not user and not self.is_authenticated():
+            raise TwitterError("This method requires authentication if user " \
+                               "is not supplied")
+
+        uri = '/statuses/user_timeline.json'
+        return TwitterStatusSet(self, uri, user=user)

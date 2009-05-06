@@ -267,3 +267,24 @@ class TwitterSearchResultSet(TwitterResultSet):
             'max_id': self.max_id,
             'geocode': self.geocode,
         }
+
+
+class TwitterStatusSet(TwitterResultSet):
+    """
+    Status result set. It's a lazy banch of statuses. 
+    """
+
+    resultclass = TwitterStatus
+
+    def __init__(self, *args, **kwargs):
+        self.max_id = 0
+        super(TwitterStatusSet, self).__init__(*args, **kwargs)
+
+    def _get_data(self, page):
+        return {
+            'page': page,
+            'count': ITEMS_PER_PAGE,
+            'since_id': self.since_id if not self.max_id else None,
+            'screen_name': self.user,
+            'max_id': self.max_id,
+        }
