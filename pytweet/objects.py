@@ -24,8 +24,8 @@ class TwitterObject(object):
     
     _transformation = {}
 
-    def __init__(self, dictargs={}, **kwargs):
-        kwargs.update(dictargs)
+    def __init__(self, dictargs=None, **kwargs):
+        kwargs.update(dictargs or {})
         for key, fc in self._transformation.iteritems():
             if isinstance(fc, str):
                 fc = getattr(sys.modules[__name__], fc)
@@ -35,6 +35,9 @@ class TwitterObject(object):
 
 
 class TwitterSearchResult(TwitterObject):
+    """
+    Twitter status representation.
+    """
     
     _transformation = {
         'text': unescape,
@@ -51,6 +54,9 @@ class TwitterSearchResult(TwitterObject):
 
 
 class TwitterUser(TwitterObject):
+    """
+    Twitter user representation.
+    """
     
     _transformation = {
         'created_at': parsedate,
@@ -108,12 +114,15 @@ class TwitterResultSet(object):
 
     resultclass = None
 
-    def __init__(self, api, uri, **kwargs):
-        self._api = api
-        self._results = []
+    def __init__(self, fetch, uri, **kwargs):
+        self._fetch = fetch
         self.uri = uri
         self.domain = kwargs.pop('domain', None)
         self.since_id = kwargs.pop('since_id', 0)
+        
+        # Defaults
+        self._results = []
+        self._actualidx = 0
 
         for k, v in kwargs.iteritems():
             setattr(self, k, v)
@@ -141,8 +150,8 @@ class TwitterResultSet(object):
         for i in xrange(len(self._results), fill_amount):
             self._results.append(None)
 
-        result = self._api._fetchurl(self.uri, get_data=data,
-                                     domain=self.domain)
+        result = self._fetch(self.uri, get_data=data,
+                             domain=self.domain)
         results = self._get_results(result)
         results_count = len(results)
         for i in xrange(ITEMS_PER_PAGE):
@@ -169,10 +178,13 @@ class TwitterResultSet(object):
         raise Exception("I can't tell you D:")
 
     def __iter__(self):
-        self._actualidx = 0
         return self
 
     def next(self):
+        """
+        Get next iteration item. We just iterate results until end or
+        first '' occurrence.
+        """
         res = None
         try:
             res = self[self._actualidx]

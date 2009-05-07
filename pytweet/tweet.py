@@ -33,31 +33,33 @@ SEARCH_API_DOMAIN = 'search.twitter.com'
 SOCKET_TIMEOUT = 10
 
 class TwitterError(Exception):
-  """Base class for Twitter errors"""
+    """Base class for Twitter errors"""
   
-  @property
-  def message(self):
-    """Returns the first argument used to construct this error."""
-    return self.args[0]
+    @property
+    def message(self):
+        """Returns the first argument used to construct this error."""
+        return self.args[0]
 
 
 class ConnectionError(TwitterError):
     """Network related errors"""
 
     def __init__(self, message, code=None):
-        self.code =code
+        self.code = code
         super(ConnectionError, self).__init__(message)
 
 
-# Decorator for authenticated methods
 def authenticated(func):
-    def newf(*args, **kw):
+    """
+    Decorator for methods that need authentication
+    """
+    def _newf(*args, **kw):
         instance = args[0]
         if not instance.is_authenticated():
             raise TwitterError('You must call authenticate first')
 
         return func(*args, **kw)
-    return newf
+    return _newf
 
 
 class Twitter(object):
@@ -83,10 +85,15 @@ class Twitter(object):
         urllib2.socket.setdefaulttimeout(SOCKET_TIMEOUT)
 
     def is_authenticated(self):
+        """
+        If auth_header has data we asume that API is authenticated
+        """
         return bool(self._auth_header)
 
     def authenticate(self, username, password):
-        # Just keep authenticate information. We will use it in next posts.
+        """
+        Just keep authenticate information. We will use it in next posts.
+        """
         baseauth = '%s:%s' % (username, password)
         authheader =  "Basic %s" % baseauth.encode('base64').strip()
         self._auth_header = ("Authorization", authheader)
@@ -97,7 +104,8 @@ class Twitter(object):
 
         # Check if there is any error in response
         if 'error' in parsed:
-            raise TwitterError(data['error'])
+            raise TwitterError(parsed['error'])
+
         return parsed
 
     def _fetchurl(self, uri, domain=None, post_data=None, get_data=None):
@@ -164,9 +172,9 @@ class Twitter(object):
                   "km" (kilometers). [optional]
         """
         uri = '/search.json'
-        return TwitterSearchResultSet(self, uri, domain=SEARCH_API_DOMAIN,
-                                      query=query, lang=lang, geocode=geocode,
-                                      since_id=since_id)
+        return TwitterSearchResultSet(self._fetchurl, uri, domain=SEARCH_API_DOMAIN,
+                                query=query, lang=lang, geocode=geocode,
+                                since_id=since_id)
 
     @authenticated
     def followers(self, user=None):
@@ -176,7 +184,7 @@ class Twitter(object):
         joined Twitter
         """
         uri = '/statuses/followers.json'
-        return TwitterUserSet(self, uri, user=user)
+        return TwitterUserSet(self._fetchurl, uri, user=user)
 
     @authenticated
     def friends(self, user=None):
@@ -186,7 +194,7 @@ class Twitter(object):
         joined Twitter
         """
         uri = '/statuses/friends.json'
-        return TwitterUserSet(self, uri, user=user)
+        return TwitterUserSet(self._fetchurl, uri, user=user)
 
     @authenticated
     def destroy(self, id):
@@ -209,4 +217,4 @@ class Twitter(object):
                                "is not supplied")
 
         uri = '/statuses/user_timeline.json'
-        return TwitterStatusSet(self, uri, user=user)
+        return TwitterStatusSet(self._fetchurl, uri, user=user)
