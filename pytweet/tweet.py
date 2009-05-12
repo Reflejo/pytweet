@@ -102,6 +102,9 @@ class Twitter(object):
         # Parse JSON response.
         parsed = simplejson.loads(response)
 
+        if not parsed:
+            raise TwitterError("Empty response from twitter")
+
         # Check if there is any error in response
         if 'error' in parsed:
             raise TwitterError(parsed['error'])
@@ -172,9 +175,10 @@ class Twitter(object):
                   "km" (kilometers). [optional]
         """
         uri = '/search.json'
-        return TwitterSearchResultSet(self._fetchurl, uri, domain=SEARCH_API_DOMAIN,
-                                query=query, lang=lang, geocode=geocode,
-                                since_id=since_id)
+        return TwitterSearchResultSet(self._fetchurl, uri, 
+                                      domain=SEARCH_API_DOMAIN,
+                                      query=query, lang=lang, geocode=geocode,
+                                      since_id=since_id)
 
     @authenticated
     def followers(self, user=None):
