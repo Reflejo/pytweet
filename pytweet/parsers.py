@@ -11,12 +11,12 @@ def parsedate(datestr):
     return datetime.datetime(*rfc_tuple[:7])
 
 
-def unescape(text):
+def unescape(text, encoding="UTF-8"):
     """
     Removes HTML or XML character references and entities from a text string.
 
     @param text The HTML (or XML) source text.
-    @return The plain text, as a Unicode string, if necessary.
+    @return The unescaped text as a Unicode.
     """
 
     def fixup(m):
@@ -25,9 +25,9 @@ def unescape(text):
             # character reference
             try:
                 if text[:3] == "&#x":
-                    return unichr(int(text[3:-1], 16))
+                    text = unichr(int(text[3:-1], 16))
                 else:
-                    return unichr(int(text[2:-1]))
+                    text = unichr(int(text[2:-1]))
             except ValueError:
                 pass
         else:
@@ -36,7 +36,9 @@ def unescape(text):
                 text = unichr(htmlentitydefs.name2codepoint[text[1:-1]])
             except KeyError:
                 pass
-        return text # leave as is
 
-    return text and unicode(re.sub("&#?\w+;", fixup, text))
+        return text
 
+    # Decode string as needed
+    text = text.decode(encoding) if isinstance(text, str) else text 
+    return text and re.sub("&#?\w+;", fixup, text)

@@ -27,6 +27,7 @@ from objects import TwitterSearchResultSet, TwitterUser, TwitterUserSet, \
 __author__ = 'Martin Conte Mac Donell <Reflejo@gmail.com>'
 __version__ = '0.1-beta'
 
+ENCODING = 'utf8'
 API_DOMAIN = 'twitter.com'
 SEARCH_API_DOMAIN = 'search.twitter.com'
 
@@ -131,10 +132,13 @@ class Twitter(object):
         # Reduce dictionary. Remove empty values.
         post_data = dict([(k, v) for k, v in post_data.iteritems() if v])
         get_data = dict([(k, v) for k, v in get_data.iteritems() if v])
-        
+ 
         # craft url
         uri = "%s?%s" % (uri, urllib.urlencode(get_data)) if get_data else uri
         url = urlparse.urljoin("http://%s" % (domain or API_DOMAIN), uri)
+
+        if isinstance(url, unicode):
+            url = url.encode(ENCODING)
 
         req = urllib2.Request(url)
         post_data = urllib.urlencode(post_data) or None
