@@ -67,7 +67,7 @@ class TwitterUser(TwitterObject):
         'friends_count': int,
         'id': int,
         'location': unicode,
-        'name': unicode,
+        'name': unescape,
         'notifications': bool,
         'profile_background_color': unicode,
         'profile_background_image_url': unicode,
