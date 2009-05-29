@@ -1,5 +1,5 @@
 #
-# Copyright 2009 Atommica. All Rights Reserved.
+# Copyright 2009 Kodear. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,8 +21,9 @@ Oh, and values are normalized to python types.
 import simplejson
 import urllib, urllib2
 import urlparse
-from objects import TwitterSearchResultSet, TwitterUser, TwitterUserSet, \
-                    TwitterStatus, TwitterStatusSet
+from objects import TwitterUser, TwitterStatus
+from setobjects import TwitterTrendSet, TwitterUserSet, TwitterStatusSet, \
+                       TwitterSearchResultSet
 
 __author__ = 'Martin Conte Mac Donell <Reflejo@gmail.com>'
 __version__ = '0.1-beta'
@@ -31,6 +32,9 @@ ENCODING = 'utf8'
 API_DOMAIN = 'twitter.com'
 SEARCH_API_DOMAIN = 'search.twitter.com'
 
+DATEDAILY = 'daily'
+DATEWEEKLY = 'weekly'
+DATECURRENT = 'current'
 SOCKET_TIMEOUT = 10
 
 class TwitterError(Exception):
@@ -88,6 +92,11 @@ class Twitter(object):
     def is_authenticated(self):
         """
         If auth_header has data we asume that API is authenticated
+
+        >>> api = Twitter(username='testpy', password='testpy')
+        >>> api.is_authenticated()
+        True
+
         """
         return bool(self._auth_header)
 
@@ -155,14 +164,6 @@ class Twitter(object):
 
         return self._parse_response(handle.read())
 
-    def user(self, user):
-        """
-        Returns extended information of a given user, specified by ID or
-        screen name. The author's most recent status will be included.
-        """
-        uri = '/users/show/%s.json' % user
-        return TwitterUser(**self._fetchurl(uri))
-
     def search(self, query, since_id=None, lang=None, geocode=None):
         """
         Returns tweets that match a specified query.
@@ -177,6 +178,16 @@ class Twitter(object):
                   specified by "latitide,longitude,radius", where radius 
                   units must be specified as either "mi" (miles) or 
                   "km" (kilometers). [optional]
+
+        >>> search = api.search('from:testpy') # Data is not fetched
+        >>> res = search[:10] # Data is fetched and cached.
+        >>> res[0].text
+        u'Big success!'
+        >>> res[0].from_user
+        u'testpy'
+        >>> res[0].created_at
+        datetime.datetime(2009, 5, 29, 3, 46, 6)
+
         """
         uri = '/search.json'
         return TwitterSearchResultSet(self._fetchurl, uri, 
@@ -184,12 +195,58 @@ class Twitter(object):
                                       query=query, lang=lang, geocode=geocode,
                                       since_id=since_id)
 
+    def trends(self, exclude_hash=False, date=None, by=DATECURRENT):
+        """
+        Returns the top ten topics that are currently trending on Twitter.
+        The response includes the time of the request, the name of each trend,
+        and the url to the Twitter Search results page for that topic.
+
+        >>> for date, trends in api.trends().iteritems():
+        ...     trends[0]
+        <pytweet.objects.TwitterTrend object at 0x...>
+        
+        """
+        assert by in (DATECURRENT, DATEDAILY, DATEWEEKLY), \
+            "Invalid by parameter, should be DATECURRENT, DATEDAY or DATEWEEK"
+
+        uri = '/trends/%s.json' % by
+        data = {
+            'exclude': "hashtags" if exclude_hash else None,
+            'date': date,
+        }
+        return TwitterTrendSet(self._fetchurl(uri=uri, post_data=data,
+                                              domain=SEARCH_API_DOMAIN))
+
+
+    def user(self, user):
+        """
+        Returns extended information of a given user, specified by ID or
+        screen name. The author's most recent status will be included.
+
+        >>> user = api.user('testpy')
+        >>> user.name
+        u'pytweet'
+        >>> user.status.text
+        u'Big success!'
+        >>> user.status.created_at
+        datetime.datetime(2009, 5, 29, 3, 46, 6)
+
+        """
+        uri = '/users/show/%s.json' % user
+        return TwitterUser(**self._fetchurl(uri))
+
     @authenticated
     def followers(self, user=None):
         """
         Returns the authenticating user's followers, each with current 
         status inline.  They are ordered by the order in which they 
         joined Twitter
+
+        >>> for user in api.followers('testpy'):
+        ...     user.name, user
+        ... 
+        (u'Atommica Cheat', <pytweet.objects.TwitterUser object at 0x...>)
+
         """
         uri = '/statuses/followers.json'
         return TwitterUserSet(self._fetchurl, uri, user=user)
@@ -197,9 +254,20 @@ class Twitter(object):
     @authenticated
     def friends(self, user=None):
         """
-        Returns the authenticating user's followers, each with current 
-        status inline.  They are ordered by the order in which they 
-        joined Twitter
+        Returns a user's friends, each with current status. They are
+        ordered by the order in which they were added as friends. Defaults to
+        the authenticated user's friends. It's also possible to request
+        another user's friends list via the user parameter.
+
+        >>> for user in api.friends('testpy'):
+        ...     user.name
+        ...     user
+        ...     user.status
+        ... 
+        u'Reflejo'
+        <pytweet.objects.TwitterUser object at 0x...>
+        <pytweet.objects.TwitterStatus object at 0x...>
+
         """
         uri = '/statuses/friends.json'
         return TwitterUserSet(self._fetchurl, uri, user=user)
@@ -209,16 +277,29 @@ class Twitter(object):
         """
         Destroys the status specified by the required ID parameter.
         The authenticating user must be the author of the specified status.
+
+        >>> api.destroy(12345)
+        <pytweet.objects.TwitterStatus object at 0x...>
+
         """
         uri = '/statuses/destroy/%d.json' % id
         data = {'delete': '1'}
         return TwitterStatus(**self._fetchurl(uri, post_data=data))
 
-    def user_timeline(self, user=None, since_id=None):
+    def user_timeline(self, user=None):
         """
         Returns the most recent user's timeline via the id parameter. 
         This is the equivalent of the Web /<user> page for your own user, 
         or the profile page for a third party.
+
+        >>> statuses = api.user_timeline('Reflejo')
+        >>> for status in api.user_timeline('testpy'):
+        ...     status.text
+        ...     status
+        ... 
+        u'Big success!'
+        <pytweet.objects.TwitterStatus object at 0x...>
+
         """
         if not user and not self.is_authenticated():
             raise TwitterError("This method requires authentication if user " \

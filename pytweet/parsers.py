@@ -3,6 +3,20 @@ import htmlentitydefs
 import re
 import rfc822
 
+def parse_iso8601(datestr):
+    date = datestr.split(' ')
+    year, month, day = map(int, date[0].split('-', 3))
+    if len(date) == 2:
+        time = map(int, date[1].split(':', 3))
+        if len(time) == 3:
+            hours, minutes, seconds = time
+        else:
+            hours, minutes = time
+            seconds = 0
+    else:
+        hours, minutes, seconds = 0, 0 ,0
+
+    return datetime.datetime(year, month, day, hours, minutes, seconds)
 
 def parsedate(datestr):
     # Convert a date string to a datetime object.
