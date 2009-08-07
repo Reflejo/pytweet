@@ -164,6 +164,23 @@ class Twitter(object):
 
         return self._parse_response(handle.read())
 
+    def rate_remaining(self):
+        """
+        Returns the remaining number of API requests available to the
+        requesting user before the API limit is reached for the current hour.
+        Calls to rate_limit_status do not count against the rate limit.  
+        If authentication credentials are provided, the rate limit status 
+        for the authenticating user is returned.  Otherwise, the rate limit
+        status for the requester's IP address is returned.
+
+        >>> rate = api.rate_remaining()
+        150
+
+        """
+        uri = '/account/rate_limit_status.json'
+        res = self._fetchurl(uri)
+        return res['remaining_hits']
+
     def search(self, query, since_id=None, lang=None, geocode=None):
         """
         Returns tweets that match a specified query.
