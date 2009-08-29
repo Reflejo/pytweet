@@ -18,6 +18,8 @@ A pythonic library that provides a simple interface to the Twitter API.
 Oh, and values are normalized to python types.
 """
 
+import httplib
+import oauth
 import simplejson
 import urllib, urllib2
 import urlparse
@@ -31,6 +33,12 @@ __version__ = '0.1-beta'
 ENCODING = 'utf8'
 API_DOMAIN = 'twitter.com'
 SEARCH_API_DOMAIN = 'search.twitter.com'
+
+# OAuth constants
+SERVER = 'twitter.com'
+REQUEST_TOKEN_URL = 'https://%s/oauth/request_token' % SERVER
+ACCESS_TOKEN_URL = 'https://%s/oauth/access_token' % SERVER
+AUTHORIZATION_URL = 'http://%s/oauth/authorize' % SERVER
 
 DATEDAILY = 'daily'
 DATEWEEKLY = 'weekly'
@@ -81,10 +89,11 @@ class Twitter(object):
     See each method for more information.
     """
 
-    def __init__(self, username=None, password=None):
+    def __init__(self, username=None, password=None, key=None, secret=None, 
+                 token=None):
         self._auth_header = ()
-        if username and password:
-            self.authenticate(username, password)
+        if (username and password) or (key and secret):
+            self.authenticate(username, password, key, secret, token)
 
         # This is the only way we can prevent socket hangs.
         urllib2.socket.setdefaulttimeout(SOCKET_TIMEOUT)
@@ -98,15 +107,27 @@ class Twitter(object):
         True
 
         """
-        return bool(self._auth_header)
+        return bool(self._auth_header or self.token)
 
-    def authenticate(self, username, password):
+    def authenticate(self, username=None, password=None, key=None, secret=None,
+                     token=None):
         """
-        Just keep authenticate information. We will use it in next posts.
+        Just keep authenticate information. We will use it in next requests.
         """
-        baseauth = '%s:%s' % (username, password)
-        authheader =  "Basic %s" % baseauth.encode('base64').strip()
-        self._auth_header = ("Authorization", authheader)
+        if username and password:
+            baseauth = '%s:%s' % (username, password)
+            authheader =  "Basic %s" % baseauth.encode('base64').strip()
+            self._auth_header = ("Authorization", authheader)
+
+        elif key and secret:
+            self._consumer = oauth.OAuthConsumer(key, secret)
+            self._connection = httplib.HTTPSConnection(SERVER)
+            self._signature_method = oauth.OAuthSignatureMethod_HMAC_SHA1()
+            self.token = token
+
+        else:
+            raise ValueError("You must specify either user/password or " \
+                             "key/secret")
 
     def _parse_response(self, response):
         # Parse JSON response.
@@ -120,6 +141,64 @@ class Twitter(object):
             raise TwitterError(parsed['error'])
 
         return parsed
+
+    def get_unauthorized_request_token(self):
+        # Obtain unauthorized request_token to init OAuth autentication
+        oauth_request = oauth.OAuthRequest.from_consumer_and_token(
+            self._consumer, http_url=REQUEST_TOKEN_URL)
+        oauth_request.sign_request(self._signature_method, self._consumer,
+                                   None)
+        resp = self._fetch_oauth_response(oauth_request)
+        try:
+            token = oauth.OAuthToken.from_string(resp.read())
+        except KeyError:
+            return None
+
+        return token
+
+    def get_authorization_url(self, token):
+        # Get authorization_url with sign
+        oauth_request = oauth.OAuthRequest.from_consumer_and_token(
+            self._consumer, token=token, http_url=AUTHORIZATION_URL)
+        oauth_request.sign_request(self._signature_method, self._consumer,
+                                   token)
+        return oauth_request.to_url()
+
+    def request_token_to_access_token(self, unauthed_token):
+        # Exchange unauthed_token for acces_token
+        if isinstance(unauthed_token, str):
+            unauthed_token = oauth.OAuthToken.from_string(unauthed_token)   
+
+        oauth_request = oauth.OAuthRequest.from_consumer_and_token(
+            self._consumer, token=unauthed_token, http_url=ACCESS_TOKEN_URL)
+        oauth_request.sign_request(self._signature_method, self._consumer, 
+                                   unauthed_token)
+        resp = self._fetch_oauth_response(oauth_request)
+        return oauth.OAuthToken.from_string(resp.read())
+
+    def _fetch_oauth_response(self, oauth_request):
+        # Fetch response using OAuth
+        # @oauth_request: OAuth request object
+        url = oauth_request.to_url()
+        self._connection.request(oauth_request.http_method, url)
+        return self._connection.getresponse()
+
+    def _fetchurl_with_oauth(self, url, get_data, post_data):
+        # Gets a OAuthRequest object and makes the request using this object.
+        assert not (get_data and post_data), \
+            "You cannot specify both GET and POST parameters"
+
+        method = 'POST' if post_data else 'GET'
+
+        # Get OAuth request
+        oauth_request = oauth.OAuthRequest.from_consumer_and_token(
+            self._consumer, token=self.token, http_method=method, http_url=url,
+            parameters=get_data or post_data)
+        oauth_request.sign_request(self._signature_method, self._consumer, 
+                                   self.token)
+
+        response = self._fetch_oauth_response(oauth_request)
+        return self._parse_response(response.read())
 
     def _fetchurl(self, uri, domain=None, post_data=None, get_data=None):
         # Fetch a URL.
@@ -142,6 +221,11 @@ class Twitter(object):
         post_data = dict([(k, v) for k, v in post_data.iteritems() if v])
         get_data = dict([(k, v) for k, v in get_data.iteritems() if v])
  
+        if hasattr(self, '_consumer'):
+            # OAuth method!
+            url = urlparse.urljoin("https://%s" % (domain or API_DOMAIN), uri)
+            return self._fetchurl_with_oauth(url, get_data, post_data)
+
         # craft url
         uri = "%s?%s" % (uri, urllib.urlencode(get_data)) if get_data else uri
         url = urlparse.urljoin("http://%s" % (domain or API_DOMAIN), uri)
@@ -182,6 +266,16 @@ class Twitter(object):
         return res['remaining_hits']
 
     rate_remaining = property(_rate_remaining)
+
+    @authenticated
+    def verify_credentials(self):
+        """
+        Returns an HTTP 200 OK response code and a representation of the 
+        requesting user if authentication was successful; returns None if not.
+        Use this method to test if supplied user credentials are valid. 
+        """
+        uri = '/account/verify_credentials.json'        
+        return TwitterUser(**self._fetchurl(uri))
 
     def search(self, query, since_id=None, lang=None, geocode=None):
         """
