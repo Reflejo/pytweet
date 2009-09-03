@@ -38,7 +38,7 @@ SEARCH_API_DOMAIN = 'search.twitter.com'
 SERVER = 'twitter.com'
 REQUEST_TOKEN_URL = 'https://%s/oauth/request_token' % SERVER
 ACCESS_TOKEN_URL = 'https://%s/oauth/access_token' % SERVER
-AUTHORIZATION_URL = 'http://%s/oauth/authorize' % SERVER
+AUTHENTICATE_URL = 'http://%s/oauth/authenticate' % SERVER
 
 DATEDAILY = 'daily'
 DATEWEEKLY = 'weekly'
@@ -90,10 +90,10 @@ class Twitter(object):
     """
 
     def __init__(self, username=None, password=None, key=None, secret=None, 
-                 token=None):
+                 access_token=None):
         self._auth_header = ()
         if (username and password) or (key and secret):
-            self.authenticate(username, password, key, secret, token)
+            self.authenticate(username, password, key, secret, access_token)
 
         # This is the only way we can prevent socket hangs.
         urllib2.socket.setdefaulttimeout(SOCKET_TIMEOUT)
@@ -110,7 +110,7 @@ class Twitter(object):
         return bool(self._auth_header or self.token)
 
     def authenticate(self, username=None, password=None, key=None, secret=None,
-                     token=None):
+                     access_token=None):
         """
         Just keep authenticate information. We will use it in next requests.
         """
@@ -123,7 +123,8 @@ class Twitter(object):
             self._consumer = oauth.OAuthConsumer(key, secret)
             self._connection = httplib.HTTPSConnection(SERVER)
             self._signature_method = oauth.OAuthSignatureMethod_HMAC_SHA1()
-            self.token = token
+            if access_token: 
+                self.token = oauth.OAuthToken.from_string(access_token)
 
         else:
             raise ValueError("You must specify either user/password or " \
@@ -156,10 +157,10 @@ class Twitter(object):
 
         return token
 
-    def get_authorization_url(self, token):
-        # Get authorization_url with sign
+    def get_authenticate_url(self, token):
+        # Get authenticate_url with sign
         oauth_request = oauth.OAuthRequest.from_consumer_and_token(
-            self._consumer, token=token, http_url=AUTHORIZATION_URL)
+            self._consumer, token=token, http_url=AUTHENTICATE_URL)
         oauth_request.sign_request(self._signature_method, self._consumer,
                                    token)
         return oauth_request.to_url()
@@ -268,6 +269,18 @@ class Twitter(object):
     rate_remaining = property(_rate_remaining)
 
     @authenticated
+    def follow(self, user):
+        """
+        Enables device notifications for updates from the specified user.
+        Returns the specified user when successful.
+
+        @user: The ID or screen name of the user to follow with device updates.
+        """
+        uri = '/friendships/create/%s.json' % user
+        data = {'follow': 'true'}
+        return TwitterUser(**self._fetchurl(uri, post_data=data))
+
+    @authenticated
     def verify_credentials(self):
         """
         Returns an HTTP 200 OK response code and a representation of the 
@@ -330,11 +343,35 @@ class Twitter(object):
         return TwitterTrendSet(self._fetchurl(uri=uri, post_data=data,
                                               domain=SEARCH_API_DOMAIN))
 
+    def update(self, msg, in_reply_to=0):
+        """
+        Updates the authenticating user's status. Requires the status 
+        parameter specified below. A status update with text identical 
+        to the authenticating user's current status will be ignored.
+
+        @msg  The text of your status update. URL encode as necessary. 
+              Statuses over 140 characters will be forceably truncated.
+        @in_reply_to The ID of an existing status that the 
+                     update is in reply to. [optional]
+
+        >>> status = api.update('Big success!')
+        >>> user.status.text
+        u'Big success!'
+        """
+        uri = '/statuses/update.json'
+        data = {
+            'in_reply_to_status_id': in_reply_to,
+            'status': msg
+        }
+        return TwitterStatus(**self._fetchurl(uri, post_data=data))
+
 
     def user(self, user):
         """
         Returns extended information of a given user, specified by ID or
         screen name. The author's most recent status will be included.
+
+        @user  The ID or screen name of a user. 
 
         >>> user = api.user('testpy')
         >>> user.name
@@ -355,6 +392,8 @@ class Twitter(object):
         status inline.  They are ordered by the order in which they 
         joined Twitter
 
+        @user  The ID or screen name of a user [optional]
+
         >>> for user in api.followers('testpy'):
         ...     user.name, user
         ... 
@@ -371,6 +410,8 @@ class Twitter(object):
         ordered by the order in which they were added as friends. Defaults to
         the authenticated user's friends. It's also possible to request
         another user's friends list via the user parameter.
+
+        @user  The ID or screen name of a user [optional]
 
         >>> for user in api.friends('testpy'):
         ...     user.name
@@ -391,6 +432,8 @@ class Twitter(object):
         Destroys the status specified by the required ID parameter.
         The authenticating user must be the author of the specified status.
 
+        @user  The ID of the status to delete 
+
         >>> api.destroy(12345)
         <pytweet.objects.TwitterStatus object at 0x...>
 
@@ -404,6 +447,8 @@ class Twitter(object):
         Returns the most recent user's timeline via the id parameter. 
         This is the equivalent of the Web /<user> page for your own user, 
         or the profile page for a third party.
+
+        @user  The ID or screen name of a user [optional]
 
         >>> statuses = api.user_timeline('Reflejo')
         >>> for status in api.user_timeline('testpy'):
