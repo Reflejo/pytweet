@@ -450,7 +450,6 @@ class Twitter(object):
 
         @user  The ID or screen name of a user [optional]
 
-        >>> statuses = api.user_timeline('Reflejo')
         >>> for status in api.user_timeline('testpy'):
         ...     status.text
         ...     status
